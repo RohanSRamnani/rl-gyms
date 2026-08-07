@@ -41,28 +41,47 @@ opponent goal.
 
 ### Architecture
 
-Package layout deliberately mirrors `rlgym.rocket_league` file-for-file, so that reading
-the official Rocket League docs afterwards requires no new mapping.
+The layout enforces the project's second goal — reusability — as a **hard directory
+boundary**. `core/` is domain-agnostic and is intended to copy verbatim into any future
+environment project. `domains/` holds everything that knows what the numbers mean.
+
+Within `domains/minirl/`, the file layout deliberately mirrors `rlgym.rocket_league`
+file-for-file, so that reading the official Rocket League docs afterwards requires no new
+mapping. Class names intentionally match the real `rlgym.rocket_league` names.
 
 ```
-minirl/
-  state.py      MiniRLState, Car dataclasses; physical constants
-  engine.py     MiniRLEngine(TransitionEngine)   — the only module that knows physics
-  mutators.py   FixedTeamSizeMutator, KickoffMutator, MutatorSequence
-  obs.py        DefaultObs(ObsBuilder)
-  actions.py    LookupTableAction, RepeatAction (ActionParser)
-  rewards.py    CombinedReward, SpeedTowardBallReward, VelocityBallToGoalReward,
-                TouchReward, GoalReward
-  dones.py      GoalCondition, TimeoutCondition, NoTouchTimeoutCondition, AnyCondition
-  render.py     MatplotlibRenderer(Renderer)
-  env.py        build_env() factory
-ppo.py          PPO implementation
-train.py        training loop + live dashboard
-exercises/      Stage 3: stubbed config objects + tests
-tests/          pytest suite
+core/                  domain-agnostic; copies verbatim to any future domain
+  ppo.py               PPO: policy/value nets, GAE, clipped update
+  rollout.py           vectorized rollout collection over N envs
+  dashboard.py         live matplotlib training dashboard
+  metrics.py           episode reward / touch rate / goal rate tracking
+
+domains/minirl/        everything that knows about cars and balls
+  state.py             MiniRLState, Car dataclasses; physical constants
+  engine.py            MiniRLEngine(TransitionEngine) — only module that knows physics
+  mutators.py          FixedTeamSizeMutator, KickoffMutator, MutatorSequence
+  obs.py               DefaultObs(ObsBuilder)
+  actions.py           LookupTableAction, RepeatAction (ActionParser)
+  rewards.py           CombinedReward, SpeedTowardBallReward,
+                       VelocityBallToGoalReward, TouchReward, GoalReward
+  dones.py             GoalCondition, TimeoutCondition, NoTouchTimeoutCondition,
+                       AnyCondition
+  render.py            MatplotlibRenderer(Renderer) — arena drawing only
+  env.py               build_env() factory
+
+train.py               entry point: wires a domain into core
+exercises/             Stage 3: stubbed config objects + tests
+tests/                 pytest suite
 ```
 
-Class names intentionally match the real `rlgym.rocket_league` names.
+**The boundary rule:** nothing in `core/` may import from `domains/`. A domain is passed
+*in* — `core` receives an env factory and observation/action sizes as arguments, never by
+import. This is enforced by a test that scans `core/` for domain imports, so a leak fails
+CI rather than being discovered when building domain #2.
+
+`core/dashboard.py` owns the figure, the reward curve, and the layout; the domain supplies
+only a `render(ax, state)` that draws the arena onto axes handed to it. That keeps the
+plotting machinery reusable while the arena drawing stays domain-specific.
 
 ### Units and constants
 
@@ -202,7 +221,7 @@ Both return `Dict[AgentID, bool]` from
 `is_done(agents, state, shared_info)` — matching the real base class, *not* the
 `is_done(agent, state) -> bool` signature shown in the official docs, which is wrong.
 
-## PPO (`ppo.py`)
+## PPO (`core/ppo.py`)
 
 Written from scratch, ~150 lines, so the mechanics stay visible.
 
@@ -216,7 +235,7 @@ Written from scratch, ~150 lines, so the mechanics stay visible.
 `V(s_final)`. On `terminated`, it uses 0. Conflating these is the headline bug this
 project exists to make concrete, and it gets a dedicated unit test.
 
-## Dashboard (`train.py`, `render.py`)
+## Dashboard (`core/dashboard.py`, `domains/minirl/render.py`)
 
 Live matplotlib figure, two panels, updated every iteration:
 
@@ -246,6 +265,10 @@ alongside the curve.
 - Each reward component has the expected sign in a hand-constructed state.
 - Every `DoneCondition` returns a dict keyed by every agent in `agents`.
 
+**Boundary** (guards reusability):
+- No module under `core/` imports from `domains/`. Scans the AST of every file in `core/`
+  for imports naming a domain, and fails if any is found.
+
 ## Stage 3: the exercise
 
 Once the reference implementation trains successfully, `exercises/` receives stubbed
@@ -268,10 +291,11 @@ Default: add an opponent by changing `FixedTeamSizeMutator(blue_size=1, orange_s
 and training via self-play. Because every object is already keyed by `AgentID`, only the
 mutator and the training loop's action-dict handling change.
 
-Alternative, if the learner names a target domain: replace `state.py` and `engine.py`
-with that domain and keep the other five objects' structure. The spec fixes the swap
-points — `engine.py` and `state.py` are the only modules that reference physics, and this
-is enforced by the file layout.
+Alternative, if the learner names a target domain: add `domains/<new>/` alongside
+`domains/minirl/`, filling the same nine files. `core/` is untouched, and `train.py`
+points at the new domain. This is the project's reusability claim, and Stage 4 is where it
+gets tested for real — if anything in `core/` turns out to need editing, that is a leak in
+the boundary and gets fixed.
 
 ## Success criteria
 
