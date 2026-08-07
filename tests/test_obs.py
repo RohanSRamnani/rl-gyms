@@ -48,10 +48,19 @@ def test_yaw_is_encoded_as_cos_sin_not_raw_angle():
 
 
 def test_orange_view_is_mirrored_so_both_teams_see_the_same_problem():
+    # Every field must be mirrored, not just position: a half-applied mirror
+    # (position negated, velocity/yaw untouched) would silently break self-play.
+    # Non-zero velocities and a non-zero yaw are what make this test bite.
     builder = DefaultObs()
-    blue = builder.build_obs([0], make_state(car_pos=(100.0, -1000.0), is_orange=False), {})[0]
-    orange = builder.build_obs([0], make_state(car_pos=(-100.0, 1000.0), is_orange=True), {})[0]
-    np.testing.assert_allclose(blue[0:2], orange[0:2], atol=1e-6)
+    blue = builder.build_obs([0], make_state(
+        car_pos=(100.0, -1000.0), car_vel=(300.0, -700.0),
+        ball_pos=(-250.0, 400.0), ball_vel=(-900.0, 1500.0),
+        yaw=0.7, is_orange=False), {})[0]
+    orange = builder.build_obs([0], make_state(
+        car_pos=(-100.0, 1000.0), car_vel=(-300.0, 700.0),
+        ball_pos=(250.0, -400.0), ball_vel=(900.0, -1500.0),
+        yaw=0.7 - np.pi, is_orange=True), {})[0]
+    np.testing.assert_allclose(blue, orange, atol=1e-6)
 
 
 def test_relative_ball_position_is_zero_when_on_top_of_the_ball():

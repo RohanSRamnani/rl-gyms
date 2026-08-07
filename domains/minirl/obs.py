@@ -19,14 +19,16 @@ REL_VEL_NORM = CAR_MAX_SPEED + BALL_MAX_SPEED
 class DefaultObs(ObsBuilder[int, np.ndarray, MiniRLState, int]):
     """A 16-dimensional normalized observation.
 
-    Layout:
-        0:2   car position          8:10  ball position
-        2:4   car velocity         10:12  ball velocity
-        4:6   car heading (cos,sin) 12:14 ball position relative to car
-        6:7   car boost            14:16 ball velocity relative to car, then distance
+    Layout (indices are load-bearing — the Stage 3 exercises index positionally):
+        0:2    car position          7:9    ball position
+        2:4    car velocity          9:11   ball velocity
+        4:6    car heading (cos,sin) 11:13  ball position relative to car
+        6:7    car boost             13:15  ball velocity relative to car
+                                     15:16  distance to ball
 
-    Every component is normalized so the whole vector stays within [-2, 2];
-    relative position is the widest term, reaching exactly 2.0 corner-to-corner.
+    Every component is normalized so the whole vector stays within [-2, 2] for
+    any physically reachable state. Relative position is the binding term,
+    approaching (but never reaching) 2.0 corner-to-corner.
 
     Yaw is encoded as (cos, sin) rather than a raw angle: a raw angle has a
     discontinuity at +/-pi that quietly wrecks learning.
