@@ -1,6 +1,8 @@
 import numpy as np
 import pytest
-from domains.minirl.state import Car, DT, CAR_MAX_SPEED, MAX_TURN_RATE
+from domains.minirl.state import (
+    Car, DT, CAR_MAX_SPEED, CAR_RADIUS, MAX_TURN_RATE, SIDE_WALL_X,
+)
 from domains.minirl.physics import step_car
 
 
@@ -18,11 +20,22 @@ def test_full_throttle_accelerates_along_yaw():
 
 
 def test_speed_plateaus_at_max_speed():
+    # 120 ticks is enough to saturate (~86 ticks at THROTTLE_ACCEL) while
+    # keeping the car well inside the arena, so the wall clamp never fires.
     car = make_car()
-    for _ in range(2000):
+    for _ in range(120):
         step_car(car, throttle=1.0, steer=0.0, boost_input=0.0, dt=DT)
+    assert abs(car.pos[0]) < SIDE_WALL_X - CAR_RADIUS, "test must not reach the wall"
     assert np.linalg.norm(car.vel) <= CAR_MAX_SPEED + 1e-6
     assert np.linalg.norm(car.vel) > CAR_MAX_SPEED * 0.95
+
+
+def test_car_is_clamped_inside_the_arena_and_loses_normal_velocity():
+    car = make_car(yaw=0.0)
+    for _ in range(600):
+        step_car(car, throttle=1.0, steer=0.0, boost_input=0.0, dt=DT)
+    assert car.pos[0] == pytest.approx(SIDE_WALL_X - CAR_RADIUS)
+    assert car.vel[0] == 0.0
 
 
 def test_boost_drains_and_stops_at_zero():
