@@ -82,6 +82,24 @@ def test_termination_bootstraps_exactly_zero():
         "a TERMINATED step has no future; its bootstrap must be exactly 0.0"
 
 
+def test_goal_rate_can_actually_leave_zero():
+    # Reading scoring_team AFTER the auto-reset always yields None, which pins
+    # goal_rate to 0.00 forever while every other metric looks healthy.
+    torch.manual_seed(0)
+    vec = VecEnv(build_env, n_envs=1)
+    vec.last_obs = vec.reset()
+    vec.envs[0].state.ball_pos = np.array([0.0, BACK_WALL_Y - 120.0])
+    vec.envs[0].state.ball_vel = np.array([0.0, 5000.0])
+
+    tracker = EpisodeTracker()
+    model = ActorCritic(OBS_SIZE, N_ACTIONS, hidden=32)
+    batch = collect_rollout(vec, model, horizon=1, tracker=tracker)
+
+    assert batch["dones"][0, 0] == 1.0
+    assert tracker.snapshot()["goal_rate"] == 1.0, \
+        "a scored goal was not counted - scoring_team was read after the reset"
+
+
 def test_collect_rollout_returns_correctly_shaped_arrays():
     torch.manual_seed(0)
     vec = VecEnv(build_env, n_envs=2)

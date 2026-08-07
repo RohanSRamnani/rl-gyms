@@ -98,4 +98,7 @@ if __name__ == "__main__":
     run_training(iterations=args.iterations, n_envs=args.n_envs, horizon=args.horizon,
                  render_every=args.render_every, show_dashboard=not args.no_dashboard,
                  seed=args.seed)
-    input("Training finished. Press Enter to close the dashboard.")
+    if not args.no_dashboard:
+        # Only block when there is actually a window to keep open; otherwise a
+        # redirected/non-interactive run dies on EOFError at the finish line.
+        input("Training finished. Press Enter to close the dashboard.")

@@ -21,6 +21,11 @@ class VecEnv:
         self.n_envs = n_envs
         self.agent_id = agent_id
         self.last_obs: Optional[np.ndarray] = None   # carried across rollouts
+        # Episode-end facts captured BEFORE each auto-reset. The reset clears
+        # scoring_team and last_touch_tick, so reading them afterwards always
+        # reports None and silently pins goal_rate to 0.
+        self._episode_scored: List[Optional[int]] = [None] * n_envs
+        self._episode_touched: List[bool] = [False] * n_envs
 
     def reset(self) -> np.ndarray:
         return np.stack([env.reset()[self.agent_id] for env in self.envs])
@@ -43,6 +48,10 @@ class VecEnv:
             terminated_flags.append(done_terminated)
             truncated_flags.append(done_truncated)
 
+            # Snapshot before the reset destroys the evidence.
+            self._episode_touched[index] = env.state.last_touch_tick is not None
+            self._episode_scored[index] = env.state.scoring_team
+
             if done_terminated or done_truncated:
                 final_observations.append(obs[self.agent_id])
                 observations.append(env.reset()[self.agent_id])
@@ -55,10 +64,12 @@ class VecEnv:
                 final_observations)
 
     def scoring_teams(self) -> List[Optional[int]]:
-        return [env.state.scoring_team for env in self.envs]
+        """Scoring team as of the last `step`, captured before any auto-reset."""
+        return list(self._episode_scored)
 
     def touched_flags(self) -> List[bool]:
-        return [env.state.last_touch_tick is not None for env in self.envs]
+        """Whether the ball had been touched as of the last `step`."""
+        return list(self._episode_touched)
 
 
 def collect_rollout(vec_env: VecEnv, model: ActorCritic, horizon: int,
@@ -88,10 +99,11 @@ def collect_rollout(vec_env: VecEnv, model: ActorCritic, horizon: int,
         log_probs_buffer[t] = log_probs.numpy()
         values_buffer[t] = values.numpy()
 
-        touched_before = vec_env.touched_flags()
         next_obs, rewards, terminated, truncated, final_obs = vec_env.step(
             actions_buffer[t]
         )
+        # Both are snapshots taken inside step(), before the auto-reset.
+        touched = vec_env.touched_flags()
         scored = [team is not None for team in vec_env.scoring_teams()]
 
         rewards_buffer[t] = rewards
@@ -115,7 +127,7 @@ def collect_rollout(vec_env: VecEnv, model: ActorCritic, horizon: int,
 
         for i in range(n):
             tracker.record(float(rewards[i]), bool(terminated[i]), bool(truncated[i]),
-                           touched_before[i], scored[i] and bool(terminated[i]))
+                           touched[i], scored[i])
 
         observations = next_obs
 
