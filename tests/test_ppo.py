@@ -98,6 +98,38 @@ def test_ppo_update_actually_learns_reducing_value_loss():
     assert losses[2] < losses[1], f"value loss did not fall: {losses}"
 
 
+def test_ppo_update_moves_the_policy_in_the_right_direction():
+    # Guards the sign of the clipped surrogate. Every other test in this file
+    # passes even with the policy loss sign flipped, because the critic trains
+    # through its own MSE term regardless — and a flipped sign trains the agent
+    # to get WORSE, which presents only as "training mysteriously fails".
+    torch.manual_seed(0)
+    model = ActorCritic(obs_size=4, n_actions=3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=3e-3)
+    config = PPOConfig(epochs=4, minibatch_size=8)
+
+    obs = torch.zeros((16, 4))
+    batch = {
+        "obs": obs,
+        "actions": torch.tensor([0, 1] * 8),          # action 0 rewarded,
+        "advantages": torch.tensor([1.0, -1.0] * 8),  # action 1 punished
+        "old_log_probs": torch.full((16,), -1.0986),
+        "returns": torch.zeros(16),
+    }
+
+    def log_probs():
+        with torch.no_grad():
+            return torch.log_softmax(model.policy(obs[:1]), dim=-1)[0]
+
+    before = log_probs()
+    for _ in range(5):
+        ppo_update(model, optimizer, batch, config)
+    after = log_probs()
+
+    assert after[0] > before[0], "rewarded action did not become more likely"
+    assert after[1] < before[1], "punished action did not become less likely"
+
+
 def test_ppo_update_survives_constant_advantages():
     # std == 0 in the normalizer; the 1e-8 guard must stop a NaN escaping.
     torch.manual_seed(0)
