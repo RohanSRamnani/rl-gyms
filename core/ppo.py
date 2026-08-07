@@ -106,9 +106,11 @@ def ppo_update(model: ActorCritic, optimizer: torch.optim.Optimizer,
             nn.utils.clip_grad_norm_(model.parameters(), config.max_grad_norm)
             optimizer.step()
 
-            stats["policy_loss"] += float(policy_loss)
-            stats["value_loss"] += float(value_loss)
-            stats["entropy"] += float(entropy_mean)
+            # .detach() before float(): torch warns about converting a tensor
+            # that still requires grad, and these are diagnostics only.
+            stats["policy_loss"] += float(policy_loss.detach())
+            stats["value_loss"] += float(value_loss.detach())
+            stats["entropy"] += float(entropy_mean.detach())
             updates += 1
 
     return {key: value / max(updates, 1) for key, value in stats.items()}
