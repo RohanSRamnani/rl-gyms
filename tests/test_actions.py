@@ -50,3 +50,13 @@ def test_repeat_action_preserves_the_wrapped_action_space():
 def test_reset_is_callable():
     parser = RepeatAction(LookupTableAction())
     parser.reset([0], blank(), {})
+
+
+def test_parsed_actions_do_not_alias_the_lookup_table():
+    parser = LookupTableAction()
+    first = parser.parse_actions({0: 7}, blank(), {})[0]
+    first[:] = 99.0                      # a caller mutating what it was handed
+    second = parser.parse_actions({0: 7}, blank(), {})[0]
+    assert not np.shares_memory(first, second)
+    np.testing.assert_allclose(second, parser._table[7])
+    assert second[0] != 99.0

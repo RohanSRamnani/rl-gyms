@@ -35,7 +35,7 @@ class LookupTableAction(ActionParser[int, int, np.ndarray, MiniRLState, int]):
 
     def parse_actions(self, actions: Dict[int, int], state: MiniRLState,
                       shared_info: Dict[str, Any]) -> Dict[int, np.ndarray]:
-        return {agent: self._table[int(action)] for agent, action in actions.items()}
+        return {agent: self._table[int(action)].copy() for agent, action in actions.items()}
 
 
 class RepeatAction(ActionParser[int, int, np.ndarray, MiniRLState, int]):
