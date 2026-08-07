@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from domains.minirl.state import Car, MiniRLState, CAR_MAX_SPEED, BALL_MAX_SPEED
 from domains.minirl.rewards import (
     CombinedReward, GoalReward, SpeedTowardBallReward, TouchReward,
@@ -73,12 +74,24 @@ def test_goal_reward_is_positive_for_scorer_and_negative_for_conceder():
 
 
 def test_combined_reward_applies_weights():
-    combined = CombinedReward((GoalReward(), 10.0), (TouchReward(), 0.5))
-    state = make_state()
+    # The two components must evaluate to DIFFERENT values, otherwise swapping
+    # the weights yields the same total and the test proves nothing.
+    # GoalReward -> 1.0 (weight 10.0); SpeedTowardBall -> 0.5 (weight 0.01).
+    combined = CombinedReward((GoalReward(), 10.0), (SpeedTowardBallReward(), 0.01))
+    state = make_state(car_vel=(0.0, CAR_MAX_SPEED / 2))
     state.scoring_team = 0
-    state.last_touch_tick = 3
     combined.reset([0], make_state(), {})
-    assert combined.get_rewards([0], state, {0: True}, {0: False}, {})[0] == 10.5
+    total = combined.get_rewards([0], state, {0: True}, {0: False}, {})[0]
+    assert total == pytest.approx(10.005)
+    # Swapped weights would give 0.01*1.0 + 10.0*0.5 = 5.01, not 10.005.
+
+
+def test_combined_reward_detects_swapped_weights():
+    swapped = CombinedReward((GoalReward(), 0.01), (SpeedTowardBallReward(), 10.0))
+    state = make_state(car_vel=(0.0, CAR_MAX_SPEED / 2))
+    state.scoring_team = 0
+    swapped.reset([0], make_state(), {})
+    assert swapped.get_rewards([0], state, {0: True}, {0: False}, {})[0] == pytest.approx(5.01)
 
 
 def test_combined_reward_returns_one_entry_per_agent():
