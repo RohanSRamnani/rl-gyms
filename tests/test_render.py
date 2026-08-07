@@ -34,6 +34,15 @@ def test_draw_arena_clears_between_frames():
     plt.close(figure)
 
 
+def test_display_scale_does_not_leak_into_physics():
+    # The renderer may inflate markers for legibility, but nothing it does may
+    # change the constants physics and rewards depend on.
+    import domains.minirl.render as render
+    from domains.minirl import state as st
+    assert render.DISPLAY_SCALE > 1.0
+    assert st.BALL_RADIUS == 91.25 and st.CAR_RADIUS == 60.0
+
+
 def test_dashboard_records_curve_history():
     dashboard = Dashboard(draw_fn=draw_arena)
     dashboard.update_curve(1, {"mean_episode_reward": 0.5, "touch_rate": 0.1,
