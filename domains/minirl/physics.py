@@ -5,7 +5,7 @@ from domains.minirl.state import (
     BOOST_ACCEL, BOOST_CONSUMPTION, BRAKE_ACCEL, CAR_MAX_SPEED, CAR_RADIUS,
     COAST_DECEL, MAX_TURN_RATE, SIDE_WALL_X, BACK_WALL_Y, THROTTLE_ACCEL,
     Car, heading, wrap_angle,
-    BALL_DRAG, BALL_MAX_SPEED, BALL_RADIUS, GOAL_HALF_WIDTH, WALL_RESTITUTION,
+    BALL_DRAG, BALL_HIT_FORCE, BALL_MAX_SPEED, BALL_RADIUS, GOAL_HALF_WIDTH, WALL_RESTITUTION,
     MiniRLState,
 )
 
@@ -82,3 +82,34 @@ def step_ball(state: "MiniRLState", dt: float) -> None:
         else:
             state.ball_pos[1] = np.sign(state.ball_pos[1]) * limit_y
             state.ball_vel[1] *= -WALL_RESTITUTION
+
+
+def collide_car_ball(state: "MiniRLState", agent_id: int, tick: int) -> bool:
+    """Resolve a circle-circle car/ball contact. Returns True if contact occurred."""
+    car = state.cars[agent_id]
+    delta = state.ball_pos - car.pos
+    dist = float(np.linalg.norm(delta))
+    min_dist = CAR_RADIUS + BALL_RADIUS
+
+    if dist >= min_dist:
+        return False
+    if dist < 1e-9:
+        # Degenerate exact overlap — push out along the car's heading.
+        normal = heading(car.yaw)
+    else:
+        normal = delta / dist
+
+    # Separate first, so the impulse is applied from a clean, non-overlapping state.
+    state.ball_pos = car.pos + normal * min_dist
+
+    # Reflect the closing component of relative velocity, then add a constant
+    # hit force so that even a stationary car nudges the ball.
+    relative = state.ball_vel - car.vel
+    closing = float(np.dot(relative, normal))
+    if closing < 0.0:
+        state.ball_vel = state.ball_vel - (1.0 + WALL_RESTITUTION) * closing * normal
+    state.ball_vel = state.ball_vel + normal * BALL_HIT_FORCE
+    state.ball_vel = _clamp_speed(state.ball_vel, BALL_MAX_SPEED)
+
+    state.last_touch_tick = tick
+    return True
