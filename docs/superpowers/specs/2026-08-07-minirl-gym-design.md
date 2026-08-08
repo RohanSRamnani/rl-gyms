@@ -66,7 +66,7 @@ domains/minirl/        everything that knows about cars and balls
                        VelocityBallToGoalReward, TouchReward, GoalReward
   dones.py             GoalCondition, TimeoutCondition, NoTouchTimeoutCondition,
                        AnyCondition
-  render.py            MatplotlibRenderer(Renderer) — arena drawing only
+  render.py            draw_arena(ax, state) — arena drawing only, at true scale
   env.py               build_env() factory
 
 train.py               entry point: wires a domain into core

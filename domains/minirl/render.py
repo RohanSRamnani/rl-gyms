@@ -18,7 +18,6 @@ above 1.66 would bury the ring inside the ball and defeat the whole point. True
 scale is the only setting that keeps the ring readable. The car is kept findable
 by its long heading stroke rather than by an inflated body.
 """
-import numpy as np
 from matplotlib.patches import Circle, Rectangle
 
 from domains.minirl.state import (
