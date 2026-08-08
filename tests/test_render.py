@@ -34,13 +34,39 @@ def test_draw_arena_clears_between_frames():
     plt.close(figure)
 
 
-def test_display_scale_does_not_leak_into_physics():
-    # The renderer may inflate markers for legibility, but nothing it does may
-    # change the constants physics and rewards depend on.
+def test_contact_ring_uses_the_true_contact_radius():
+    # The dashed ring is the animation's authority on when a hit happens, so it
+    # must match the threshold physics actually uses — and nothing the renderer
+    # does may change the constants physics and rewards depend on.
     import domains.minirl.render as render
     from domains.minirl import state as st
-    assert render.DISPLAY_SCALE > 1.0
+    assert render.CONTACT_RADIUS == st.CAR_RADIUS + st.BALL_RADIUS
     assert st.BALL_RADIUS == 91.25 and st.CAR_RADIUS == 60.0
+
+
+def _ball_facecolour(ax):
+    from domains.minirl.state import BALL_RADIUS
+    for patch in ax.patches:
+        if getattr(patch, "radius", None) == BALL_RADIUS:
+            return patch.get_facecolor()
+    raise AssertionError("no ball patch found at BALL_RADIUS")
+
+
+def test_ball_turns_red_only_on_a_recent_touch():
+    figure, ax = plt.subplots()
+
+    quiet = make_state()
+    quiet.last_touch_tick = None
+    draw_arena(ax, quiet)
+    quiet_colour = _ball_facecolour(ax)
+
+    just_hit = make_state()
+    just_hit.ticks, just_hit.last_touch_tick = 50, 48
+    draw_arena(ax, just_hit)
+    hit_colour = _ball_facecolour(ax)
+
+    assert quiet_colour != hit_colour, "the ball must flash on a real touch"
+    plt.close(figure)
 
 
 def test_dashboard_records_curve_history():
