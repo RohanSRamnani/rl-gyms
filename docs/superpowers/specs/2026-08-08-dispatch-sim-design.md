@@ -93,7 +93,11 @@ class Ticket:
 
 @dataclass
 class Vendor:
-    kind: int            # which ticket kind they can fix
+    kind: int            # specialty: fixes this kind 2x faster; can work ANY kind.
+                         # (Refined from "which kind they can fix": with 3 vendors
+                         # and 4 kinds, hard matching leaves one kind unfixable —
+                         # an unwinnable state. Specialists-are-faster keeps the
+                         # matching decision interesting without it.)
     cost_per_job: float
     available: bool      # busy until current job finishes
     no_show_prob: float
