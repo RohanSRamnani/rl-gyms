@@ -15,8 +15,7 @@ class Dashboard:
         self.draw_fn = draw_fn
         self.iterations: List[int] = []
         self.rewards: List[float] = []
-        self.touch_rates: List[float] = []
-        self.goal_rates: List[float] = []
+        self.rates: Dict[str, List[float]] = {}
 
         plt.ion()
         self.figure, (self.arena_ax, self.curve_ax) = plt.subplots(
@@ -28,8 +27,9 @@ class Dashboard:
     def update_curve(self, iteration: int, snapshot: Dict[str, float]) -> None:
         self.iterations.append(iteration)
         self.rewards.append(snapshot["mean_episode_reward"])
-        self.touch_rates.append(snapshot["touch_rate"])
-        self.goal_rates.append(snapshot["goal_rate"])
+        rate_keys = sorted(k for k in snapshot if k.endswith("_rate"))
+        for key in rate_keys:
+            self.rates.setdefault(key[:-5], []).append(snapshot[key])
 
         self.curve_ax.clear()
         self.rate_ax.clear()
@@ -39,10 +39,13 @@ class Dashboard:
         self.curve_ax.set_ylabel("mean episode reward", color="tab:blue")
         self.curve_ax.grid(alpha=0.3)
 
-        self.rate_ax.plot(self.iterations, self.touch_rates, color="tab:green",
-                          linestyle="--", label="touch rate")
-        self.rate_ax.plot(self.iterations, self.goal_rates, color="tab:red",
-                          linestyle=":", label="goal rate")
+        styles = ["--", ":", "-.", (0, (1, 1))]
+        colours = ["tab:green", "tab:red", "tab:purple", "tab:brown"]
+        for i, (name, series) in enumerate(sorted(self.rates.items())):
+            self.rate_ax.plot(self.iterations[-len(series):], series,
+                              color=colours[i % len(colours)],
+                              linestyle=styles[i % len(styles)],
+                              label=f"{name} rate")
         self.rate_ax.set_ylabel("rate")
         self.rate_ax.set_ylim(-0.05, 1.05)
 

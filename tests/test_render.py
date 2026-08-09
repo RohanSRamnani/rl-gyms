@@ -77,7 +77,8 @@ def test_dashboard_records_curve_history():
                                "goal_rate": 0.1, "episodes": 9})
     assert dashboard.iterations == [1, 2]
     assert dashboard.rewards == [0.5, 1.5]
-    assert dashboard.touch_rates == [0.1, 0.4]
+    assert dashboard.rates["touch"] == [0.1, 0.4]
+    assert dashboard.rates["goal"] == [0.0, 0.1]
     dashboard.close()
 
 

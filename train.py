@@ -11,7 +11,7 @@ from core.dashboard import Dashboard
 from core.metrics import EpisodeTracker
 from core.ppo import ActorCritic, PPOConfig, compute_gae, ppo_update
 from core.rollout import VecEnv, collect_rollout
-from domains.minirl.env import N_ACTIONS, OBS_SIZE, build_env
+from domains.minirl.env import N_ACTIONS, OBS_SIZE, build_env, episode_events
 from domains.minirl.render import draw_arena
 
 
@@ -58,8 +58,8 @@ def run_training(iterations: int = 400, n_envs: int = 8, horizon: int = 256,
     env_seeds = np.random.SeedSequence(seed).spawn(n_envs)
     env_counter = itertools.count()
     vec_env = VecEnv(lambda: build_env(rng=np.random.default_rng(env_seeds[next(env_counter)])),
-                     n_envs=n_envs)
-    tracker = EpisodeTracker()
+                     n_envs=n_envs, event_fn=episode_events)
+    tracker = EpisodeTracker(("touch", "goal"))
     dashboard = Dashboard(draw_fn=draw_arena) if show_dashboard else None
 
     history: List[Dict[str, float]] = []

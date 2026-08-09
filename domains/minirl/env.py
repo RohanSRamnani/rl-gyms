@@ -21,7 +21,7 @@ from domains.minirl.rewards import (
 )
 from domains.minirl.state import ACTION_REPEAT
 
-__all__ = ["build_env", "OBS_SIZE", "N_ACTIONS"]
+__all__ = ["build_env", "episode_events", "OBS_SIZE", "N_ACTIONS"]
 
 NO_TOUCH_TIMEOUT_SECONDS = 10.0
 GAME_TIMEOUT_SECONDS = 30.0
@@ -49,3 +49,11 @@ def build_env(blue_size: int = 1, orange_size: int = 0,
             TimeoutCondition(timeout_seconds=GAME_TIMEOUT_SECONDS),
         ),
     )
+
+
+def episode_events(state) -> dict:
+    """MiniRL's episode-level events, for core.rollout.VecEnv(event_fn=...)."""
+    return {
+        "touch": state.last_touch_tick is not None,
+        "goal": state.scoring_team is not None,
+    }

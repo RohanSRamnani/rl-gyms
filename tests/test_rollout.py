@@ -3,14 +3,16 @@ import torch
 from core.metrics import EpisodeTracker
 from core.ppo import ActorCritic
 from core.rollout import VecEnv, collect_rollout
-from domains.minirl.env import build_env, N_ACTIONS, OBS_SIZE
+from domains.minirl.env import build_env, episode_events, N_ACTIONS, OBS_SIZE
 from domains.minirl.state import BACK_WALL_Y, TICK_RATE
 
 
 def test_episode_tracker_averages_completed_episodes():
-    tracker = EpisodeTracker()
-    tracker.record(1.0, terminated=False, truncated=False, touched=False, scored=False)
-    tracker.record(2.0, terminated=False, truncated=True, touched=True, scored=False)
+    tracker = EpisodeTracker(("touch", "goal"))
+    tracker.record(1.0, terminated=False, truncated=False,
+                   events={"touch": False, "goal": False})
+    tracker.record(2.0, terminated=False, truncated=True,
+                   events={"touch": True, "goal": False})
     snapshot = tracker.snapshot()
     assert snapshot["episodes"] == 1
     assert np.isclose(snapshot["mean_episode_reward"], 3.0)
@@ -86,12 +88,12 @@ def test_goal_rate_can_actually_leave_zero():
     # Reading scoring_team AFTER the auto-reset always yields None, which pins
     # goal_rate to 0.00 forever while every other metric looks healthy.
     torch.manual_seed(0)
-    vec = VecEnv(build_env, n_envs=1)
+    vec = VecEnv(build_env, n_envs=1, event_fn=episode_events)
     vec.last_obs = vec.reset()
     vec.envs[0].state.ball_pos = np.array([0.0, BACK_WALL_Y - 120.0])
     vec.envs[0].state.ball_vel = np.array([0.0, 5000.0])
 
-    tracker = EpisodeTracker()
+    tracker = EpisodeTracker(("touch", "goal"))
     model = ActorCritic(OBS_SIZE, N_ACTIONS, hidden=32)
     batch = collect_rollout(vec, model, horizon=1, tracker=tracker)
 
