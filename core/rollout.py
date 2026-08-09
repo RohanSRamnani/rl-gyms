@@ -1,4 +1,5 @@
-"""Vectorized rollout collection. Domain-agnostic: takes an env factory."""
+"""Vectorized rollout collection. Domain-agnostic: takes an env factory and an
+event extractor; never references a domain's state fields by name."""
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -11,21 +12,21 @@ from core.ppo import ActorCritic
 class VecEnv:
     """Runs N single-agent RLGym environments in-process with auto-reset.
 
-    On an episode boundary `step` returns the observation of the FINAL state
-    before resetting, in `final_obs`. PPO needs that observation to bootstrap
-    truncated episodes correctly.
+    `event_fn(state) -> Dict[str, bool]` is supplied by the DOMAIN and read
+    inside `step` BEFORE any auto-reset, because the reset wipes the evidence
+    (a mutator clearing an episode field is what previously pinned a metric to
+    zero forever). `final_obs[i]` is likewise the pre-reset observation, which
+    PPO needs to bootstrap truncated episodes correctly.
     """
 
-    def __init__(self, env_fn: Callable[[], Any], n_envs: int, agent_id: int = 0) -> None:
+    def __init__(self, env_fn: Callable[[], Any], n_envs: int, agent_id: int = 0,
+                 event_fn: Optional[Callable[[Any], Dict[str, bool]]] = None) -> None:
         self.envs = [env_fn() for _ in range(n_envs)]
         self.n_envs = n_envs
         self.agent_id = agent_id
-        self.last_obs: Optional[np.ndarray] = None   # carried across rollouts
-        # Episode-end facts captured BEFORE each auto-reset. The reset clears
-        # scoring_team and last_touch_tick, so reading them afterwards always
-        # reports None and silently pins goal_rate to 0.
-        self._episode_scored: List[Optional[int]] = [None] * n_envs
-        self._episode_touched: List[bool] = [False] * n_envs
+        self.event_fn = event_fn
+        self.last_obs: Optional[np.ndarray] = None   # kept across rollouts
+        self._episode_events: List[Dict[str, bool]] = [{} for _ in range(n_envs)]
 
     def reset(self) -> np.ndarray:
         return np.stack([env.reset()[self.agent_id] for env in self.envs])
@@ -49,8 +50,9 @@ class VecEnv:
             truncated_flags.append(done_truncated)
 
             # Snapshot before the reset destroys the evidence.
-            self._episode_touched[index] = env.state.last_touch_tick is not None
-            self._episode_scored[index] = env.state.scoring_team
+            self._episode_events[index] = (
+                self.event_fn(env.state) if self.event_fn is not None else {}
+            )
 
             if done_terminated or done_truncated:
                 final_observations.append(obs[self.agent_id])
@@ -63,13 +65,9 @@ class VecEnv:
                 np.array(terminated_flags), np.array(truncated_flags),
                 final_observations)
 
-    def scoring_teams(self) -> List[Optional[int]]:
-        """Scoring team as of the last `step`, captured before any auto-reset."""
-        return list(self._episode_scored)
-
-    def touched_flags(self) -> List[bool]:
-        """Whether the ball had been touched as of the last `step`."""
-        return list(self._episode_touched)
+    def episode_events(self) -> List[Dict[str, bool]]:
+        """Event flags as of the last `step`, captured before any auto-reset."""
+        return [dict(events) for events in self._episode_events]
 
 
 def collect_rollout(vec_env: VecEnv, model: ActorCritic, horizon: int,
@@ -102,9 +100,8 @@ def collect_rollout(vec_env: VecEnv, model: ActorCritic, horizon: int,
         next_obs, rewards, terminated, truncated, final_obs = vec_env.step(
             actions_buffer[t]
         )
-        # Both are snapshots taken inside step(), before the auto-reset.
-        touched = vec_env.touched_flags()
-        scored = [team is not None for team in vec_env.scoring_teams()]
+        # Snapshots taken inside step(), before the auto-reset.
+        events = vec_env.episode_events()
 
         rewards_buffer[t] = rewards
         dones_buffer[t] = (terminated | truncated).astype(np.float32)
@@ -127,7 +124,7 @@ def collect_rollout(vec_env: VecEnv, model: ActorCritic, horizon: int,
 
         for i in range(n):
             tracker.record(float(rewards[i]), bool(terminated[i]), bool(truncated[i]),
-                           touched[i], scored[i])
+                           events[i])
 
         observations = next_obs
 
