@@ -38,9 +38,9 @@ def build_env(rng: Optional[np.random.Generator] = None) -> RLGym:
         action_parser=ContentAction(),
         reward_fn=CombinedReward(
             (ViewsReward(), 0.01),
-            (FollowGrowthReward(), 0.1),
+            (FollowGrowthReward(), 0.2),
             (OutlierReward(), 0.5),
-            (RestrictionReward(), 10.0),
+            (RestrictionReward(), 15.0),
         ),
         transition_engine=ContentEngine(rng=rng),
         termination_cond=RestrictionCondition(),
